@@ -1,28 +1,62 @@
 
 class Game
-    attr_accessor :code_length, :game_over, :number_of_turns, :all_feedback, :player_side
+    attr_accessor :code_length, :number_of_turns
+    @@feedback; @@guesses; @@player_side; @@code; @@game_over
     public
     def play
-        code_breaker = CodeBreaker.new(code_length)
-        code_maker = CodeMaker.new(code_length)
         turn = 1
 
-        puts "welcome to codebreaker! try to guess the 4 digit number. Enter 'info' to check the rules."
-        puts "do you want to be the codebreaker or the codemaker? enter 1 or 2."
-        print_board(number_of_turns)
+        determine_side
+        code_breaker = CodeBreaker.new(code_length)
+        code_maker = CodeMaker.new(code_length)
+        if @@player_side == 2
+            code_maker.enter_code
+            @@code = code_maker.code
+        end
 
-        while !@game_over and turn <= 8
-            guess = code_breaker.make_guess(@player_side)
-            code_maker.compare_guess_to_code(code_breaker.guesses, self)
-            print_board(code_maker.feedback, code_breaker.guesses, @number_of_turns)
+        puts "welcome to codebreaker! try to guess the 4 digit number. Enter 'info' to check the rules."
+        print_board
+        while @@game_over == false and turn <= 8
+            if @@player_side == 1
+                code_breaker.make_guess
+                code_maker.compare_guess_to_code
+                print_board
+            else
+                code_breaker.generate_guess
+                puts "The computer guesses: #{@@guesses.last}"
+                code_maker.compare_guess_to_code
+                sleep(1.3)
+                print_board
+            end
             turn += 1
         end
-        puts "You lose. The code was #{code_maker.code}"
+        print_board
+        if @@guesses.last == @@code
+            puts "The Codebreaker wins! The code was #{code_maker.code}"
+        else
+            puts "The Codebreaker loses! The code was #{code_maker.code}"
+        end
     end
     private
-    def print_board(all_feedback = [], guesses = [], number_of_turns)
+
+    def determine_side
+        puts ("Enter 1 for Codebreaker and 2 for Codemaker")
+        side = gets.chomp
+        if side.to_i.to_s == side and side.to_i.between?(1,2)
+            @@player_side = side.to_i
+            if side == '1'
+                puts "You have chosen Codebreaker!"
+            else
+                puts "You have chosen Codemaker!"
+            end
+        else
+            determine_side
+        end
+    end
+
+    def print_board()
         game_board = []
-        number_of_guesses = guesses.length
+        number_of_guesses = @@guesses.length
         space = ' ' * 45
 
         empty_row =   space + '( ) ( ) ( ) ( )         o o o o'
@@ -34,56 +68,65 @@ class Game
             game_board << empty_row
         end
 
-        guesses.reverse.zip(all_feedback.reverse).each do |guess, feedback|
+        @@guesses.reverse.zip(@@feedback.reverse).each do |guess, fb|
 
             str = "(#{guess[0]}) (#{guess[1]}) (#{guess[2]}) (#{guess[3]})         "
-            str += "#{feedback[0]} #{feedback[1]} #{feedback[2]} #{feedback[3]}" + '         '
+            str += "#{fb[0]} #{fb[1]} #{fb[2]} #{fb[3]}" + '         '
             game_board << lines
             game_board << space + str
         end
+
+        game_board << space
        puts game_board
-    end
-
-    def choose_side
-        choice = gets.chomp
-
-        if choice.to_i.to_s = choice and choice.to_i >= 1 and choice.to_i <= 2
-            if choice == 1
-                @player_side = 'codebreaker'
-            else
-                @player_side = 'codemaker'
-            end
-        else 
-            choose_side
-        end
-
     end
 
     def initialize(code_length = 4, number_of_turns = 8)
         self.code_length = code_length
-        self.game_over = false
+        @@game_over = false
         self.number_of_turns = number_of_turns
-        self.all_feedback = []
+        @@feedback = []
+        @@guesses = []
     end
 
-    def self.victory
+    def victory
         puts "You win!"
         exit
     end
 
 end
 
-class CodeBreaker
-    attr_accessor :guesses, :code_length, :possible_matches, :matches
+class CodeBreaker < Game
+    attr_accessor :already_guessed
     public
-    def make_guess(player_side)
-        if player_side = 'codebreaker'
+    def make_guess
             puts "Enter your guess"
             guess = gets.chomp
             validate_guess(guess)
+    end
+
+    def generate_guess
+        guess = []
+
+        if @@guesses.empty?
+            4.times {guess << random}
         else
-            generate_guess
+            (0..3).each do |i|
+                if @@guesses.last[i] == @@code[i]
+                    guess[i] = @@code[i]
+                    @already_guessed << guess[i]
+                else
+                    guess[i] = random
+                    while @already_guessed.include?(guess[i])
+                        guess[i] = random
+                    end
+                end
+            end
         end
+        @@guesses << guess
+    end
+
+    def random
+        (rand * 6 + 1).floor
     end
 
     def validate_guess(guess)
@@ -101,7 +144,7 @@ class CodeBreaker
                 guess[i].to_i <= 6 and guess[i].to_i > 0
             end
             if nums_in_valid_range
-                guesses << guess.split("").map {|i| i.to_i}
+                @@guesses << guess.split("").map {|i| i.to_i}
             else 
                 print_error_msg
             end
@@ -110,16 +153,9 @@ class CodeBreaker
         end
     end
 
-    def generate_guess
-        codemaker = CodeMaker.new()
-        code = codemaker.code
-
-        
-    end
-
     def initialize(code_length)
-        self.guesses = []
         self.code_length = code_length
+        self.already_guessed = []
     end
     private
     def print_error_msg
@@ -128,22 +164,21 @@ class CodeBreaker
     end
 end
 
-class CodeMaker
-    attr_accessor :code, :code_length, :feedback
+class CodeMaker < Game
+    attr_accessor :code, :code_length
     public
     
-    def compare_guess_to_code(guess, game)
+    def compare_guess_to_code()
         matches = []
-        last_guess = guess.last
+        last_guess = @@guesses.last
 
 
-        if guess.last == @code
-            game.game_over = true
-            Game.victory
+        if @@guesses.last == @code
+            @@game_over = true
         end
 
         temp_string = ''
-        (0..code_length-1).each do |i|
+        (0..code_length - 1).each do |i|
             if @code[i] == last_guess[i]
                 matches << code[i]
                 temp_string += 'r'
@@ -155,17 +190,41 @@ class CodeMaker
             end
         end
         temp_string += ('o' * (4 - temp_string.length))
-        @feedback << temp_string.split("")
+        @@feedback << temp_string.split("")
     end
 
     def initialize(code_length)
         @code = []
-        @feedback = []
         @code_length = code_length
         
         while @code.length < code_length
             @code << (rand * 6 + 1).floor
             @code.uniq!
+        end
+    end
+
+    def enter_code
+        error_msg = 'Invalid.'
+        puts "Enter code with 4 unique digits."
+        code = gets.chomp
+        if code.to_i.to_s == code
+            code = code.split("")
+            all_valid = code.to_a.all? { |digit| digit.to_i.between?(1,6) }
+            if all_valid
+                code = code.map {|digit| digit.to_i}
+                if code.uniq == code
+                    @@code = code
+                else
+                    puts "All digits must be unique, i.e., not duplicated."
+                    enter_code
+                end
+            else
+                puts error_msg
+                enter_code
+            end
+        else
+            puts error_msg
+            enter_code
         end
     end
 
